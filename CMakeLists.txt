@@ -16,7 +16,16 @@ include_directories(include)
 # Create executable
 add_executable(${PROJECT_NAME} ${SOURCES})
 
-target_link_libraries(main PRIVATE SFML::Graphics)
+# Add SFML as a dependency
+include(FetchContent)
+FetchContent_Declare(SFML
+    GIT_REPOSITORY https://github.com/SFML/SFML.git
+    GIT_TAG 3.0.1
+    GIT_SHALLOW ON
+    EXCLUDE_FROM_ALL
+    SYSTEM)
+FetchContent_MakeAvailable(SFML)
+target_link_libraries(${PROJECT_NAME} PRIVATE SFML::Graphics)
 
 # Enable warnings
 if (MSVC)
