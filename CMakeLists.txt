@@ -16,8 +16,7 @@ include_directories(include)
 # Create executable
 add_executable(${PROJECT_NAME} ${SOURCES})
 
-# Link libraries (if any)
-# target_link_libraries(${PROJECT_NAME} <library_name>)
+target_link_libraries(main PRIVATE SFML::Graphics)
 
 # Enable warnings
 if (MSVC)

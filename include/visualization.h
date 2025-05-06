@@ -4,6 +4,7 @@
 // TODO: 可视化函数要求接收一个二维数组q，来绘制出机械臂的运动轨迹
 // TODO: 还需要一个测试函数，让q1,q2,q3直接正弦变化，测试可视化效果
 #include <vector>
+#define Window_Name "Visualization"
 
 
 class Visualization {
