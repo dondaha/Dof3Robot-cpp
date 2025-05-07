@@ -19,7 +19,10 @@ private:
 public:
     Planner(double L1, double L2, double L3, double x, double y, double r, double q1 = 0, double q2 = 0, double q3 = 0);
     ~Planner();
-    std::vector<std::vector<double>> planTrajectoryNewton(std::vector<std::vector<double>> points);
+    std::vector<std::vector<double>> planTrajectoryNewton(std::vector<std::vector<double>> points); // 逐点牛顿法迭代q
+    std::vector<std::vector<double>> planTrajectorySampling(std::vector<std::vector<double>> points); // 基于采样的方法
+    std::vector<std::vector<double>> planTrajectoryOptimization(std::vector<std::vector<double>> points); // 基于优化的方法
+    std::vector<std::vector<double>> planTrajectoryAnalytical(std::vector<std::vector<double>> points); // 基于解析的方法
     std::vector<std::vector<double>> pointsSampler(double step);
     Eigen::Matrix<double, 2, 3> J_matrix();
     Eigen::Vector2d kinematics();
