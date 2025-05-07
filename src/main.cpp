@@ -19,7 +19,7 @@ int main(){
     // 规划路径
     std::vector<std::vector<double>> points = planner->pointsSampler(0.1);
     // 规划轨迹
-    std::vector<std::vector<double>> q = planner->planTrajectory(points);
+    std::vector<std::vector<double>> q = planner->planTrajectoryNewton(points);
     // 计算轨迹q空间的总长度
     double total_q_length = calculate_total_q_distance(q);
     printf("Total q length: %.2f\n", total_q_length);

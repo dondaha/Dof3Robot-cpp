@@ -19,7 +19,7 @@ private:
 public:
     Planner(double L1, double L2, double L3, double x, double y, double r, double q1 = 0, double q2 = 0, double q3 = 0);
     ~Planner();
-    std::vector<std::vector<double>> planTrajectory(std::vector<std::vector<double>> points);
+    std::vector<std::vector<double>> planTrajectoryNewton(std::vector<std::vector<double>> points);
     std::vector<std::vector<double>> pointsSampler(double step);
     Eigen::Matrix<double, 2, 3> J_matrix();
     Eigen::Vector2d kinematics();

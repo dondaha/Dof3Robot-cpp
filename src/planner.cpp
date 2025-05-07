@@ -61,7 +61,7 @@ std::vector<std::vector<double>> Planner::pointsSampler(double step)
     return points;
 }
 
-std::vector<std::vector<double>> Planner::planTrajectory(std::vector<std::vector<double>> points){
+std::vector<std::vector<double>> Planner::planTrajectoryNewton(std::vector<std::vector<double>> points){
     std::vector<std::vector<double>> trajectory;
     
     for (const auto &point : points)
