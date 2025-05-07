@@ -11,7 +11,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 file(GLOB_RECURSE SOURCES src/*.cpp)
 
 # Add include directories
-include_directories(include)
+include_directories(include third_party/eigen-3.4.0)
 
 # Create executable
 add_executable(${PROJECT_NAME} ${SOURCES})

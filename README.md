@@ -17,3 +17,5 @@ sudo apt update && sudo apt install \
      libdrm-dev \
      libgbm-dev
 ```
+
+下载[Eigen](https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.tar.gz)，解压放入third_party
