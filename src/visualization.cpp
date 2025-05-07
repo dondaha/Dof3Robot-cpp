@@ -69,8 +69,10 @@ void Visualization::drawArm(double q1, double q2, double q3)
     this->window.draw(*line3); // Draw the third arm
 }
 
-void Visualization::visualize()
+void Visualization::visualize(std::vector<std::vector<double>> q)
 {
+    uint64_t total_frames = q.size(); // 帧数
+    uint64_t frames = 0;             // 帧数
     while (this->window.isOpen())
     {
         // check all the window's events that were triggered since the last iteration of the loop
@@ -87,8 +89,15 @@ void Visualization::visualize()
         // draw the circle
         drawCircle(circle_x, circle_y, circle_r);
         // draw the arms
-        drawArm(q[0], q[1], q[2]);
-
+        drawArm(q[frames][0], q[frames][1], q[frames][2]);
+        if (frames < total_frames - 1)
+        {
+            frames++;
+        }
+        else if (PlayLoop)
+        {
+            frames = 0; // Reset frames to loop the animation
+        }
         // end the current frame
         window.display();
     }
@@ -97,30 +106,16 @@ void Visualization::visualize()
 void Visualization::testSinusoidalMotion()
 {
     uint64_t frames = 0;         // 帧数
-    while (this->window.isOpen())
+    std::vector<std::vector<double>> q;
+    while (frames < Max_FrameRate * 10)
     {
-        // check all the window's events that were triggered since the last iteration of the loop
-        while (const std::optional event = window.pollEvent())
-        {
-            // "close requested" event: we close the window
-            if (event->is<sf::Event::Closed>())
-                window.close();
-        }
-
-        // clear the window with black color
-        window.clear(sf::Color::White);
-        
-        // draw the circle
-        drawCircle(circle_x, circle_y, circle_r);
         // draw the arms
-        q[0] = M_PI / 6 * sin(2.0 * frames / Max_FrameRate); // q1
-        q[1] = M_PI / 6 * sin(3.0 * frames / Max_FrameRate); // q2
-        q[2] = M_PI / 4 * sin(4.0 * frames / Max_FrameRate); // q3
-        drawArm(q[0], q[1], q[2]);
-
+        this->q[0] = M_PI / 6 * sin(2.0 * frames / Max_FrameRate); // q1
+        this->q[1] = M_PI / 6 * sin(3.0 * frames / Max_FrameRate); // q2
+        this->q[2] = M_PI / 4 * sin(4.0 * frames / Max_FrameRate); // q3
+        q.push_back(this->q);
         frames++;
-
-        // end the current frame
-        window.display();
     }
+    // 调用函数进行可视化
+    visualize(q);
 }

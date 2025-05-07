@@ -18,6 +18,7 @@
 #define Line3_Color sf::Color(236, 112, 99)
 #define Circle_Color sf::Color(170, 183, 184)
 #define Max_FrameRate 60
+#define PlayLoop true  // 是否循环播放
 
 class Visualization
 {
@@ -35,7 +36,7 @@ public:
     ~Visualization();
     void drawCircle(double x, double y, double r);
     void drawArm(double q1, double q2, double q3);
-    void visualize();
+    void visualize(std::vector<std::vector<double>> q);
     void testSinusoidalMotion();
 };
 
