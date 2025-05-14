@@ -6,7 +6,7 @@
 #include <Eigen/Dense>
 
 #define Tolerance 1e-2 // Tolerance for numerical stability
-#define Max_Iter 10000 // Maximum number of iterations for optimization
+#define Max_Iter 3000 // Maximum number of iterations for optimization
 
 class Planner
 {
@@ -20,6 +20,7 @@ public:
     Planner(double L1, double L2, double L3, double x, double y, double r, double q1 = 0, double q2 = 0, double q3 = 0);
     ~Planner();
     std::vector<std::vector<double>> planTrajectoryNewton(std::vector<std::vector<double>> points);
+    std::vector<std::vector<double>> planTrajectoryOpitmization(std::vector<std::vector<double>> points);
     std::vector<std::vector<double>> pointsSampler(double step);
     Eigen::Matrix<double, 2, 3> J_matrix();
     Eigen::Vector2d kinematics();

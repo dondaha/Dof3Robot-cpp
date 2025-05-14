@@ -71,7 +71,7 @@ std::vector<std::vector<double>> Planner::planTrajectoryNewton(std::vector<std::
         Eigen::Vector2d p_error = p_d - p; // 计算当前点与目标点的误差
         double distance_error = sqrt((p_error).dot(p_error)); // 计算当前点与目标点的距离误差
         if (distance_error < 1e-10)
-        { // 如果误差小于容忍度，直接返回
+        { // 如果误差小于容忍度，直接返回（不优化第一个点的位置，因为这是机械臂的初始位置）
             trajectory.push_back({q[0], q[1], q[2]});
             continue;
         }
@@ -94,6 +94,57 @@ std::vector<std::vector<double>> Planner::planTrajectoryNewton(std::vector<std::
     }
     return trajectory;
 }
+
+std::vector<std::vector<double>> Planner::planTrajectoryOpitmization(std::vector<std::vector<double>> points) {
+    int num_points = points.size();
+    // 使用优化方法，梯度下降
+    // eta = c + k * d 为优化变量，c是每个q对应的末端坐标与其对应目标的距离的平方和，d是q空间路径长度，k是权重
+    // 先使用牛顿法求解初始值
+    std::vector<std::vector<double>> qp = planTrajectoryNewton(points); // q是类的私有变量Eigen::Vector3d，qp第i行代表第i个点对应的q^T
+    std::vector<std::vector<double>> dq(qp.size(), std::vector<double>(3, 0)); // dq是每个点的增量
+    uint64_t iter = 0; // 迭代次数
+    while (iter<Max_Iter){
+        for (int i = 1; i < num_points; i++)
+        {
+            q[0] = qp[i][0];
+            q[1] = qp[i][1];
+            q[2] = qp[i][2];
+            auto fqi = kinematics();
+            Eigen::Vector3d c = 2 * J_matrix().transpose() * (fqi - Eigen::Vector2d(points[i][0], points[i][1])); // 与目标点的距离的梯度
+            Eigen::Vector3d d;
+            if (i == 1){
+                d = Eigen::Vector3d(2*(qp[i][0]-qp[i+1][0]), 2*(qp[i][1]-qp[i+1][1]), 2*(qp[i][2]-qp[i+1][2]));
+            }
+            else if (i>1&&i<num_points-1)
+            {
+                Eigen::Vector3d qi = {qp[i][0], qp[i][1], qp[i][2]};
+                Eigen::Vector3d qi_rear = {qp[i-1][0], qp[i-1][1], qp[i-1][2]};
+                Eigen::Vector3d qi_front = {qp[i+1][0], qp[i+1][1], qp[i+1][2]};
+                d = 2*(qi-qi_rear) + 2*(qi-qi_front);
+            }
+            else{
+                d = Eigen::Vector3d(2*(qp[num_points-1][0]-qp[num_points-2][0]), 2*(qp[num_points-1][1]-qp[num_points-2][1]), 2*(qp[num_points-1][2]-qp[num_points-2][2]));
+            }
+            // 更新dq
+            double k = 1.0; // d所占的权重
+            dq[i][0] = c[0] + k*d[0];
+            dq[i][1] = c[1] + k*d[1];
+            dq[i][2] = c[2] + k*d[2];
+        }
+        // 更新qp
+        double lr = 0.001;
+        for (int i = 0; i < num_points; i++)
+        {
+            qp[i][0] -= lr*dq[i][0];
+            qp[i][1] -= lr*dq[i][1];
+            qp[i][2] -= lr*dq[i][2];
+        }
+        printf("iter: %d, qp: %.2f %.2f %.2f\n", iter, qp[0][0], qp[0][1], qp[0][2]);
+        iter++;
+    }
+    return qp;
+}
+
 
 Eigen::Matrix<double, 2, 3> Planner::J_matrix(){
     // 计算雅可比矩阵
