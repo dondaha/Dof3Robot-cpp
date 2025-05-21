@@ -6,7 +6,7 @@
 #include <Eigen/Dense>
 
 #define Tolerance 1e-2 // Tolerance for numerical stability
-#define Max_Iter 5000 // Maximum number of iterations for optimization
+#define Max_Iter 1000 // Maximum number of iterations for optimization
 
 class Planner
 {

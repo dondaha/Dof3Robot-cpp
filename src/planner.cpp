@@ -96,20 +96,17 @@ std::vector<std::vector<double>> Planner::planTrajectoryNewton(std::vector<std::
     return trajectory;
 }
 
-// std::vector<std::vector<double>> Planner::planTrajectoryOpitmization(std::vector<std::vector<double>> points) {
-//     int num_points = points.size();
-//     // 使用优化方法，min{1/2*dQ^T*H*dQ + g^T*dQ}，Q的大小为3(N-1)x1，由q2,q3,...,q_N组成。H为hessian矩阵大小3(n-1)x3(n-1)，g为梯度向量大小3(n-1)x1
-//     // 约束 J*dQ = -C ，其中C_i = F(q_i) - p_i 大小为2x1，代表x,y方向的误差，C的大小为2(N-1)x1
-//     // KKT方程组：
-//     // [H  J^T]   [  dQ  ]   [ -g ]
-//     // [J   0 ] X [lambda] = [ -C ]
-//     // H的主对角线为4I_3的块，主对角线最后一个块为2I_3，次对角线全为-2I_3的块，为稀疏矩阵
-//     // 每一次更新中，J为2(N-1)x3(N-1)的矩阵，由对角上的2x3雅可比矩阵J_i组成。
-//     // 每一次更新中，g为3(N-1)x1的梯度向量，由2(2q_2-q_1-q_3),2(q_3-q_2-q_4),...,2(2q_{N-1}-q_{N-2}-q_N),2(q_N-q_{N-1})组成。
-//     // 使用eigen的SimplicialLDLT求解KKT方程组
-// }
 
 std::vector<std::vector<double>> Planner::planTrajectoryOpitmization(std::vector<std::vector<double>> points) {
+    // 使用优化方法，min{1/2*dQ^T*H*dQ + g^T*dQ}，Q的大小为3(N-1)x1，由q2,q3,...,q_N组成。H为hessian矩阵大小3(n-1)x3(n-1)，g为梯度向量大小3(n-1)x1
+    // 约束 J*dQ = -C ，其中C_i = F(q_i) - p_i 大小为2x1，代表x,y方向的误差，C的大小为2(N-1)x1
+    // KKT方程组：
+    // [H  J^T]   [  dQ  ]   [ -g ]
+    // [J   0 ] X [lambda] = [ -C ]
+    // H的主对角线为4I_3的块，主对角线最后一个块为2I_3，次对角线全为-2I_3的块，为稀疏矩阵
+    // 每一次更新中，J为2(N-1)x3(N-1)的矩阵，由对角上的2x3雅可比矩阵J_i组成。
+    // 每一次更新中，g为3(N-1)x1的梯度向量，由2(2q_2-q_1-q_3),2(q_3-q_2-q_4),...,2(2q_{N-1}-q_{N-2}-q_N),2(q_N-q_{N-1})组成。
+    // 使用eigen的SimplicialLDLT求解KKT方程组
     int num_points = points.size();
     if (num_points <= 1) return {std::vector<double>{q[0], q[1], q[2]}};
 
@@ -117,7 +114,7 @@ std::vector<std::vector<double>> Planner::planTrajectoryOpitmization(std::vector
     std::vector<Eigen::Vector3d> Q_initial;
     Eigen::Vector3d q_current = q;
     Q_initial.reserve(num_points - 1);
-    for (size_t i = 1; i < num_points; ++i) {
+    for (int i = 1; i < num_points; ++i) {
         // 用牛顿法获取初始猜测
         Eigen::Vector2d p_target(points[i][0], points[i][1]);
         for (int iter = 0; iter < Max_Iter; ++iter) {
@@ -219,7 +216,7 @@ std::vector<std::vector<double>> Planner::planTrajectoryOpitmization(std::vector
 
         // 7. 搜索方向上的步长
 
-        double alpha = 0.001; // 步长
+        double alpha = 0.01; // 步长
         
         // 8. 更新Q
         Q += alpha*delta.head(3*(num_points-1));

@@ -3,7 +3,6 @@
 #include "planner.h"
 
 int main(){
-    omp_set_num_threads(6);
     int thread_num = Eigen::nbThreads( );
     printf("Program started, thread num: %d\n", thread_num);
     // 定义机械臂长度
