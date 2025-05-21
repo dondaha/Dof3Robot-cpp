@@ -1,5 +1,6 @@
 #include "planner.h"
 #include <iostream>
+#include <Eigen/Sparse> // Include the Eigen Sparse module
 
 
 Planner::Planner(double L1, double L2, double L3, double x, double y, double r, double q1, double q2, double q3)
@@ -67,7 +68,7 @@ std::vector<std::vector<double>> Planner::planTrajectoryNewton(std::vector<std::
     for (const auto &point : points)
     {
         Eigen::Vector2d p_d(point[0], point[1]); // 目标点
-        Eigen::Vector2d p = kinematics();       // 当前点
+        Eigen::Vector2d p = kinematics(q);       // 当前点
         Eigen::Vector2d p_error = p_d - p; // 计算当前点与目标点的误差
         double distance_error = sqrt((p_error).dot(p_error)); // 计算当前点与目标点的距离误差
         if (distance_error < 1e-10)
@@ -81,12 +82,12 @@ std::vector<std::vector<double>> Planner::planTrajectoryNewton(std::vector<std::
         // J 是 3x2 的雅可比矩阵
         while (distance_error > Tolerance && iter < Max_Iter)
         {
-            Eigen::Matrix<double, 2, 3> J = J_matrix(); // 雅可比矩阵
+            Eigen::Matrix<double, 2, 3> J = J_matrix(q); // 雅可比矩阵
             p_error = p_d - p; // 计算当前点与目标点的误差
             // std::cout << "J: " << J << std::endl;
             Eigen::Matrix<double, 3, 1> delta_q = J.completeOrthogonalDecomposition().solve(p_error);
             q += delta_q; // 更新角度
-            p = kinematics(); // 更新当前点
+            p = kinematics(q); // 更新当前点
             distance_error = (p_error).dot(p_error); // 更新距离误差
             iter++;
         }
@@ -95,74 +96,167 @@ std::vector<std::vector<double>> Planner::planTrajectoryNewton(std::vector<std::
     return trajectory;
 }
 
+// std::vector<std::vector<double>> Planner::planTrajectoryOpitmization(std::vector<std::vector<double>> points) {
+//     int num_points = points.size();
+//     // 使用优化方法，min{1/2*dQ^T*H*dQ + g^T*dQ}，Q的大小为3(N-1)x1，由q2,q3,...,q_N组成。H为hessian矩阵大小3(n-1)x3(n-1)，g为梯度向量大小3(n-1)x1
+//     // 约束 J*dQ = -C ，其中C_i = F(q_i) - p_i 大小为2x1，代表x,y方向的误差，C的大小为2(N-1)x1
+//     // KKT方程组：
+//     // [H  J^T]   [  dQ  ]   [ -g ]
+//     // [J   0 ] X [lambda] = [ -C ]
+//     // H的主对角线为4I_3的块，主对角线最后一个块为2I_3，次对角线全为-2I_3的块，为稀疏矩阵
+//     // 每一次更新中，J为2(N-1)x3(N-1)的矩阵，由对角上的2x3雅可比矩阵J_i组成。
+//     // 每一次更新中，g为3(N-1)x1的梯度向量，由2(2q_2-q_1-q_3),2(q_3-q_2-q_4),...,2(2q_{N-1}-q_{N-2}-q_N),2(q_N-q_{N-1})组成。
+//     // 使用eigen的SimplicialLDLT求解KKT方程组
+// }
+
 std::vector<std::vector<double>> Planner::planTrajectoryOpitmization(std::vector<std::vector<double>> points) {
     int num_points = points.size();
-    // 使用优化方法，梯度下降
-    // eta = c + k * d 为优化变量，c是每个q对应的末端坐标与其对应目标的距离的平方和，d是q空间路径长度，k是权重
-    // 先使用牛顿法求解初始值
-    std::vector<std::vector<double>> qp = planTrajectoryNewton(points); // q是类的私有变量Eigen::Vector3d，qp第i行代表第i个点对应的q^T
-    std::vector<std::vector<double>> dq(qp.size(), std::vector<double>(3, 0)); // dq是每个点的增量
-    uint64_t iter = 0; // 迭代次数
-    while (iter<Max_Iter){
-        for (int i = 1; i < num_points; i++)
-        {
-            q[0] = qp[i][0];
-            q[1] = qp[i][1];
-            q[2] = qp[i][2];
-            auto fqi = kinematics();
-            Eigen::Vector3d c = 2 * J_matrix().transpose() * (fqi - Eigen::Vector2d(points[i][0], points[i][1])); // 与目标点的距离的梯度
-            Eigen::Vector3d d;
-            if (i == 1){
-                d = Eigen::Vector3d(2*(qp[i][0]-qp[i+1][0]), 2*(qp[i][1]-qp[i+1][1]), 2*(qp[i][2]-qp[i+1][2]));
-            }
-            else if (i>1&&i<num_points-1)
-            {
-                Eigen::Vector3d qi = {qp[i][0], qp[i][1], qp[i][2]};
-                Eigen::Vector3d qi_rear = {qp[i-1][0], qp[i-1][1], qp[i-1][2]};
-                Eigen::Vector3d qi_front = {qp[i+1][0], qp[i+1][1], qp[i+1][2]};
-                d = 2*(qi-qi_rear) + 2*(qi-qi_front);
-            }
-            else{
-                d = Eigen::Vector3d(2*(qp[num_points-1][0]-qp[num_points-2][0]), 2*(qp[num_points-1][1]-qp[num_points-2][1]), 2*(qp[num_points-1][2]-qp[num_points-2][2]));
-            }
-            // 更新dq
-            double k = 1.0; // d所占的权重
-            dq[i][0] = c[0] + k*d[0];
-            dq[i][1] = c[1] + k*d[1];
-            dq[i][2] = c[2] + k*d[2];
+    if (num_points <= 1) return {std::vector<double>{q[0], q[1], q[2]}};
+
+    // 初始化优化变量 Q = [q2, q3, ..., qN]
+    std::vector<Eigen::Vector3d> Q_initial;
+    Eigen::Vector3d q_current = q;
+    Q_initial.reserve(num_points - 1);
+    for (size_t i = 1; i < num_points; ++i) {
+        // 用牛顿法获取初始猜测
+        Eigen::Vector2d p_target(points[i][0], points[i][1]);
+        for (int iter = 0; iter < Max_Iter; ++iter) {
+            Eigen::Vector2d p = kinematics(q_current);
+            Eigen::Vector2d error = p_target - p;
+            if (error.norm() < Tolerance) break;
+            Eigen::Matrix<double, 2, 3> J = J_matrix(q_current);
+            q_current += J.completeOrthogonalDecomposition().solve(error);
         }
-        // 更新qp
-        double lr = 0.001;
-        for (int i = 0; i < num_points; i++)
-        {
-            qp[i][0] -= lr*dq[i][0];
-            qp[i][1] -= lr*dq[i][1];
-            qp[i][2] -= lr*dq[i][2];
-        }
-        printf("iter: %d, qp: %.2f %.2f %.2f\n", iter, qp[0][0], qp[0][1], qp[0][2]);
-        iter++;
+        Q_initial.push_back(q_current);
     }
-    return qp;
+    
+    // 转换为Eigen向量
+    Eigen::VectorXd Q(3 * (num_points - 1));
+    for (size_t i = 0; i < Q_initial.size(); ++i)
+        Q.segment<3>(3*i) = Q_initial[i];
+    
+    // 优化迭代
+    for (int opt_iter = 0; opt_iter < Max_Iter; ++opt_iter) {
+        // 1. 构建Hessian矩阵 (稀疏)
+        Eigen::SparseMatrix<double> H(3*(num_points-1), 3*(num_points-1));
+        std::vector<Eigen::Triplet<double>> triplets_H;
+        for (int i = 0; i < num_points-1; ++i) {
+            // 主对角块
+            double diag_val = (i == num_points-2) ? 2.0 : 4.0;
+            for (int j = 0; j < 3; ++j)
+                triplets_H.emplace_back(3*i + j, 3*i + j, diag_val);
+            
+            // 非对角块
+            if (i < num_points-2) {
+                for (int j = 0; j < 3; ++j) {
+                    triplets_H.emplace_back(3*i + j, 3*(i+1) + j, -2.0);
+                    triplets_H.emplace_back(3*(i+1) + j, 3*i + j, -2.0);
+                }
+            }
+        }
+        H.setFromTriplets(triplets_H.begin(), triplets_H.end());
+        
+        // 2. 计算梯度g
+        Eigen::VectorXd g = Eigen::VectorXd::Zero(3*(num_points-1));
+        for (int i = 0; i < num_points-1; ++i) {
+            Eigen::Vector3d q_i = Q.segment<3>(3*i);
+            Eigen::Vector3d q_prev = (i == 0) ? q : Q.segment<3>(3*(i-1));
+            Eigen::Vector3d q_next = (i == num_points-2) ? Eigen::Vector3d(Eigen::Vector3d::Zero()) : Q.segment<3>(3*(i+1));
+            if (i == num_points-2) {
+                g.segment<3>(3*i) = 2.0 * (q_i - q_prev);
+            } else {
+                g.segment<3>(3*i) = 2.0 * ((2.0 * q_i) - q_prev - q_next);
+            }
+        }
+        
+        // 3. 构建雅可比矩阵J和残差c
+        Eigen::SparseMatrix<double> J(2*(num_points-1), 3*(num_points-1));
+        Eigen::VectorXd c(2*(num_points-1));
+        std::vector<Eigen::Triplet<double>> triplets_J;
+        for (int i = 0; i < num_points-1; ++i) {
+            Eigen::Vector3d q_i = Q.segment<3>(3*i);
+            Eigen::Matrix<double, 2, 3> Ji = J_matrix(q_i);
+            for (int row = 0; row < 2; ++row)
+                for (int col = 0; col < 3; ++col)
+                    triplets_J.emplace_back(2*i + row, 3*i + col, Ji(row, col));
+            
+            Eigen::Vector2d p_i = kinematics(q_i);
+            c.segment<2>(2*i) = p_i - Eigen::Map<Eigen::Vector2d>(points[i+1].data());
+        }
+        J.setFromTriplets(triplets_J.begin(), triplets_J.end());
+        
+        // 4. 构建KKT系统
+        Eigen::SparseMatrix<double> KKT(3*(num_points-1) + 2*(num_points-1), 3*(num_points-1) + 2*(num_points-1));
+        std::vector<Eigen::Triplet<double>> triplets_KKT;
+        
+        // 填入H
+        for (int i = 0; i < H.outerSize(); ++i)
+            for (Eigen::SparseMatrix<double>::InnerIterator it(H, i); it; ++it)
+                triplets_KKT.emplace_back(it.row(), it.col(), it.value());
+        
+        // 填入J和J^T
+        for (int i = 0; i < J.outerSize(); ++i)
+            for (Eigen::SparseMatrix<double>::InnerIterator it(J, i); it; ++it) {
+                triplets_KKT.emplace_back(3*(num_points-1) + it.row(), it.col(), it.value());
+                triplets_KKT.emplace_back(it.col(), 3*(num_points-1) + it.row(), it.value());
+            }
+        
+        KKT.setFromTriplets(triplets_KKT.begin(), triplets_KKT.end());
+        
+        // 5. 构建右侧向量
+        Eigen::VectorXd rhs(3*(num_points-1) + 2*(num_points-1));
+        rhs.head(3*(num_points-1)) = -g;
+        rhs.tail(2*(num_points-1)) = -c;
+        
+        // 6. 求解
+        Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>> solver;
+        solver.compute(KKT);
+        if (solver.info() != Eigen::Success) {
+            std::cerr << "KKT matrix decomposition failed!" << std::endl;
+            break;
+        }
+        Eigen::VectorXd delta = solver.solve(rhs);
+
+        // 7. 搜索方向上的步长
+
+        double alpha = 0.001; // 步长
+        
+        // 8. 更新Q
+        Q += alpha*delta.head(3*(num_points-1));
+
+        printf("Iteration %d: Delta Norm: %.6f\n", opt_iter, delta.norm());
+        
+        // 检查收敛
+        if (delta.norm() < Tolerance) break;
+    }
+    
+    // 转换为轨迹
+    std::vector<std::vector<double>> trajectory;
+    trajectory.push_back({q[0], q[1], q[2]}); // q1
+    for (int i = 0; i < num_points-1; ++i) {
+        Eigen::Vector3d qi = Q.segment<3>(3*i);
+        trajectory.push_back({qi[0], qi[1], qi[2]});
+    }
+    return trajectory;
 }
 
 
-Eigen::Matrix<double, 2, 3> Planner::J_matrix(){
-    // 计算雅可比矩阵
+// planner.cpp 实现修改
+Eigen::Matrix<double, 2, 3> Planner::J_matrix(const Eigen::Vector3d& q_val) {
     Eigen::Matrix<double, 2, 3> J;
-    J(0, 0) = -L1 * sin(q[0]) - L2 * sin(q[0] + q[1]) - L3 * sin(q[0] + q[1] + q[2]);
-    J(0, 1) = -L2 * sin(q[0] + q[1]) - L3 * sin(q[0] + q[1] + q[2]);
-    J(0, 2) = -L3 * sin(q[0] + q[1] + q[2]);
-    J(1, 0) = L1 * cos(q[0]) + L2 * cos(q[0] + q[1]) + L3 * cos(q[0] + q[1] + q[2]);
-    J(1, 1) = L2 * cos(q[0] + q[1]) + L3 * cos(q[0] + q[1] + q[2]);
-    J(1, 2) = L3 * cos(q[0] + q[1] + q[2]);
+    J(0, 0) = -L1*sin(q_val[0]) - L2*sin(q_val[0]+q_val[1]) - L3*sin(q_val[0]+q_val[1]+q_val[2]);
+    J(0, 1) = -L2*sin(q_val[0]+q_val[1]) - L3*sin(q_val[0]+q_val[1]+q_val[2]);
+    J(0, 2) = -L3*sin(q_val[0]+q_val[1]+q_val[2]);
+    J(1, 0) = L1*cos(q_val[0]) + L2*cos(q_val[0]+q_val[1]) + L3*cos(q_val[0]+q_val[1]+q_val[2]);
+    J(1, 1) = L2*cos(q_val[0]+q_val[1]) + L3*cos(q_val[0]+q_val[1]+q_val[2]);
+    J(1, 2) = L3*cos(q_val[0]+q_val[1]+q_val[2]);
     return J;
 }
 
-Eigen::Vector2d Planner::kinematics(){
-    // 计算正运动学
+Eigen::Vector2d Planner::kinematics(const Eigen::Vector3d& q_val) {
     Eigen::Vector2d p;
-    p(0) = L1 * cos(q[0]) + L2 * cos(q[0] + q[1]) + L3 * cos(q[0] + q[1] + q[2]);
-    p(1) = L1 * sin(q[0]) + L2 * sin(q[0] + q[1]) + L3 * sin(q[0] + q[1] + q[2]);
+    p(0) = L1*cos(q_val[0]) + L2*cos(q_val[0]+q_val[1]) + L3*cos(q_val[0]+q_val[1]+q_val[2]);
+    p(1) = L1*sin(q_val[0]) + L2*sin(q_val[0]+q_val[1]) + L3*sin(q_val[0]+q_val[1]+q_val[2]);
     return p;
 }
 

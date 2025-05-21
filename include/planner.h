@@ -6,7 +6,7 @@
 #include <Eigen/Dense>
 
 #define Tolerance 1e-2 // Tolerance for numerical stability
-#define Max_Iter 3000 // Maximum number of iterations for optimization
+#define Max_Iter 5000 // Maximum number of iterations for optimization
 
 class Planner
 {
@@ -22,8 +22,8 @@ public:
     std::vector<std::vector<double>> planTrajectoryNewton(std::vector<std::vector<double>> points);
     std::vector<std::vector<double>> planTrajectoryOpitmization(std::vector<std::vector<double>> points);
     std::vector<std::vector<double>> pointsSampler(double step);
-    Eigen::Matrix<double, 2, 3> J_matrix();
-    Eigen::Vector2d kinematics();
+    Eigen::Matrix<double, 2, 3> J_matrix(const Eigen::Vector3d& q_val);
+    Eigen::Vector2d kinematics(const Eigen::Vector3d& q_val);
 };
 
 double calculate_total_q_distance(const std::vector<std::vector<double>> &q);
