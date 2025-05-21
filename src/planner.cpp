@@ -216,15 +216,40 @@ std::vector<std::vector<double>> Planner::planTrajectoryOpitmization(std::vector
 
         // 7. 搜索方向上的步长
 
-        double alpha = 0.01; // 步长
-        
+        // 7.1 固定步长
+        // double alpha = 0.1; // 固定步长
+
+        // 7.2 Diminishing step size
+        // double alpha = 2.0/(opt_iter+1.0); // 步长
+
+        // 7.3 使用Backtracking/Armijo 线搜索
+        // 算法说明
+        // 1. 计算当前点的函数值f(x^k)
+        // 2. 计算将要迭代到的点的函数值f(x^k+alpha*delta)
+        // 3. 计算Armijo条件：f(x^k+alpha*delta) - f(x^k) > c * (alpha*delta)^T * gradiant 即目标点需要在一根线下面
+        // 4. 如果不满足条件，收缩步长alpha *= beta
+        // 5. 直到满足条件
+        // 在这里gradiant就是delta归一化之后的值，与前面的delta^T相乘即为1，因此为f(x^k+alpha*delta) - f(x^k) > c * alpha
+        double alpha = 1.0; // 初始步长
+        double beta = 0.5; // 收缩因子
+        double armijo_error = 0.0; // 初始的f(x^k+alpha*delta) - f(x^k)
+
+        double f_current = 0;
+        double f_new = 0.5 * alpha*delta.head(3*(num_points-1)).dot(H * alpha*delta.head(3*(num_points-1))) + g.dot(alpha*delta.head(3*(num_points-1)));
+        armijo_error = f_new - f_current;
+        while (armijo_error > 0.5*alpha){
+            alpha *= beta; // 收缩步长
+            f_new = 0.5 * alpha*delta.head(3*(num_points-1)).dot(H * alpha*delta.head(3*(num_points-1))) + g.dot(alpha*delta.head(3*(num_points-1)));
+            armijo_error = f_new - f_current;
+        }
+
         // 8. 更新Q
         Q += alpha*delta.head(3*(num_points-1));
 
-        printf("Iteration %d: Delta Norm: %.6f\n", opt_iter, delta.norm());
+        printf("Iteration %d: Delta Q Norm: %.6f\n", opt_iter, delta.head(3*(num_points-1)).norm());
         
         // 检查收敛
-        if (delta.norm() < Tolerance) break;
+        if (delta.head(3*(num_points-1)).norm() < Tolerance) break;
     }
     
     // 转换为轨迹
