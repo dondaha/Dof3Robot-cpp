@@ -27,6 +27,12 @@ FetchContent_Declare(SFML
 FetchContent_MakeAvailable(SFML)
 target_link_libraries(${PROJECT_NAME} PRIVATE SFML::Graphics)
 
+# Enable OpenMP
+find_package(OpenMP REQUIRED)
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(${PROJECT_NAME} PRIVATE OpenMP::OpenMP_CXX)
+endif()
+
 # Enable warnings
 if (MSVC)
     target_compile_options(${PROJECT_NAME} PRIVATE /W4)

@@ -3,7 +3,9 @@
 #include "planner.h"
 
 int main(){
-    printf("Hello World\n");
+    omp_set_num_threads(6);
+    int thread_num = Eigen::nbThreads( );
+    printf("Program started, thread num: %d\n", thread_num);
     // 定义机械臂长度
     const double L1 = 110;
     const double L2 = 145;
