@@ -107,7 +107,7 @@ std::vector<std::vector<double>> Planner::planTrajectoryOpitmization(std::vector
     // 每一次更新中，J为2(N-1)x3(N-1)的矩阵，由对角上的2x3雅可比矩阵J_i组成。
     // 每一次更新中，g为3(N-1)x1的梯度向量，由2(2q_2-q_1-q_3),2(q_3-q_2-q_4),...,2(2q_{N-1}-q_{N-2}-q_N),2(q_N-q_{N-1})组成。
     // 使用eigen的SimplicialLDLT求解KKT方程组
-    int num_points = points.size();
+    int64_t num_points = static_cast<int64_t>(points.size());
     if (num_points <= 1) return {std::vector<double>{q[0], q[1], q[2]}};
 
     // 初始化优化变量 Q = [q2, q3, ..., qN]

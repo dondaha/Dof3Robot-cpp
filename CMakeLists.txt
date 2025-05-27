@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.16)
 
+# 设置策略以消除 CMP0167 警告
+cmake_policy(SET CMP0167 NEW)
+
 # Project name
 project(Dof3Robot LANGUAGES CXX)
 
@@ -11,21 +14,25 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 file(GLOB_RECURSE SOURCES src/*.cpp)
 
 # Add include directories
-include_directories(include third_party/eigen-3.4.0)
+find_package(Eigen3 3.4 REQUIRED NO_MODULE)
+include_directories(include ${EIGEN3_INCLUDE_DIRS})
 
 # Create executable
-add_executable(${PROJECT_NAME} ${SOURCES})
+add_executable(${PROJECT_NAME} src/main.cpp src/planner.cpp src/visualization.cpp)
+add_executable(OMPL_TEST src/ompl_test.cpp)
 
 # Add SFML as a dependency
-include(FetchContent)
-FetchContent_Declare(SFML
-    GIT_REPOSITORY https://github.com/SFML/SFML.git
-    GIT_TAG 3.0.1
-    GIT_SHALLOW ON
-    EXCLUDE_FROM_ALL
-    SYSTEM)
-FetchContent_MakeAvailable(SFML)
+find_package(SFML 3.0 COMPONENTS Graphics System REQUIRED)
 target_link_libraries(${PROJECT_NAME} PRIVATE SFML::Graphics)
+
+# Add OMPL as a dependency
+find_package(ompl CONFIG REQUIRED)
+## OMPL for OMPL_TEST
+target_include_directories(OMPL_TEST PRIVATE ${OMPL_INCLUDE_DIRS})
+target_link_libraries(OMPL_TEST PRIVATE ompl)
+## OMPL for main project
+target_include_directories(${PROJECT_NAME} PRIVATE ${OMPL_INCLUDE_DIRS})
+target_link_libraries(${PROJECT_NAME} PRIVATE ompl)
 
 # Enable OpenMP
 find_package(OpenMP REQUIRED)
@@ -34,7 +41,7 @@ if(OpenMP_CXX_FOUND)
 endif()
 
 # Enable warnings
-if (MSVC)
+if(MSVC)
     target_compile_options(${PROJECT_NAME} PRIVATE /W4)
 else()
     target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -pedantic)

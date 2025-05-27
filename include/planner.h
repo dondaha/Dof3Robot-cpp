@@ -5,6 +5,10 @@
 #include <math.h>
 #include <Eigen/Dense>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 #define Tolerance 1e-2 // Tolerance for numerical stability
 #define Max_Iter 1000 // Maximum number of iterations for optimization
 
@@ -15,7 +19,6 @@ private:
     double circle_x, circle_y; // Center of the circle
     double circle_r; // Radius of the circle
     Eigen::Vector3d q; // Array to store current joint angles
-    int num_points; // Number of points in the trajectory
 public:
     Planner(double L1, double L2, double L3, double x, double y, double r, double q1 = 0, double q2 = 0, double q3 = 0);
     ~Planner();

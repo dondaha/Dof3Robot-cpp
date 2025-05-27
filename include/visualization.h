@@ -6,6 +6,10 @@
 #include <vector>
 #include <SFML/Graphics.hpp>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 #define Window_Name "Visualization"
 #define Window_Width 1200
 #define Window_Height 800
