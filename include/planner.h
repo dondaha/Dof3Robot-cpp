@@ -4,29 +4,49 @@
 #include <vector>
 #include <math.h>
 #include <Eigen/Dense>
+#include <ompl/base/spaces/RealVectorStateSpace.h>
+#include <ompl/base/objectives/PathLengthOptimizationObjective.h>
+#include <ompl/geometric/planners/rrt/RRTstar.h>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
 
 #define Tolerance 1e-2 // Tolerance for numerical stability
-#define Max_Iter 1000 // Maximum number of iterations for optimization
+#define Max_Iter 1000  // Maximum number of iterations for optimization
 
 class Planner
 {
 private:
-    double L1, L2, L3; // Lengths of the arms
+    double L1, L2, L3;         // Lengths of the arms
     double circle_x, circle_y; // Center of the circle
-    double circle_r; // Radius of the circle
-    Eigen::Vector3d q; // Array to store current joint angles
+    double circle_r;           // Radius of the circle
+    Eigen::Vector3d q;         // Array to store current joint angles
+    // RRT*规划相关成员
+    ompl::base::StateSpacePtr space;
+    ompl::base::SpaceInformationPtr si;
+    ompl::base::ProblemDefinitionPtr pdef;
+    // 自定义约束检查
+    class CircleConstraint : public ompl::base::StateValidityChecker
+    {
+    public:
+        CircleConstraint(const ompl::base::SpaceInformationPtr &si, Planner *planner)
+            : ompl::base::StateValidityChecker(si), planner_(planner) {}
+
+        bool isValid(const ompl::base::State *state) const override;
+
+    private:
+        Planner *planner_;
+    };
+
 public:
     Planner(double L1, double L2, double L3, double x, double y, double r, double q1 = 0, double q2 = 0, double q3 = 0);
     ~Planner();
     std::vector<std::vector<double>> planTrajectoryNewton(std::vector<std::vector<double>> points);
     std::vector<std::vector<double>> planTrajectoryOpitmization(std::vector<std::vector<double>> points);
     std::vector<std::vector<double>> pointsSampler(double step);
-    Eigen::Matrix<double, 2, 3> J_matrix(const Eigen::Vector3d& q_val);
-    Eigen::Vector2d kinematics(const Eigen::Vector3d& q_val);
+    Eigen::Matrix<double, 2, 3> J_matrix(const Eigen::Vector3d &q_val);
+    Eigen::Vector2d kinematics(const Eigen::Vector3d &q_val);
 };
 
 double calculate_total_q_distance(const std::vector<std::vector<double>> &q);

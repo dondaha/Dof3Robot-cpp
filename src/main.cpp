@@ -2,8 +2,9 @@
 #include "visualization.h"
 #include "planner.h"
 
-int main(){
-    int thread_num = Eigen::nbThreads( );
+int main()
+{
+    int thread_num = Eigen::nbThreads();
     printf("Program started, thread num: %d\n", thread_num);
     // 定义机械臂长度
     const double L1 = 110;

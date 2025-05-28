@@ -72,7 +72,7 @@ void Visualization::drawArm(double q1, double q2, double q3)
 void Visualization::visualize(std::vector<std::vector<double>> q)
 {
     uint64_t total_frames = q.size(); // 帧数
-    uint64_t frames = 0;             // 帧数
+    uint64_t frames = 0;              // 帧数
     while (this->window.isOpen())
     {
         // check all the window's events that were triggered since the last iteration of the loop
@@ -105,7 +105,7 @@ void Visualization::visualize(std::vector<std::vector<double>> q)
 
 void Visualization::testSinusoidalMotion()
 {
-    uint64_t frames = 0;         // 帧数
+    uint64_t frames = 0; // 帧数
     std::vector<std::vector<double>> q;
     while (frames < Max_FrameRate * 10)
     {
