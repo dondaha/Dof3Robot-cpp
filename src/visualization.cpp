@@ -69,10 +69,67 @@ void Visualization::drawArm(double q1, double q2, double q3)
     this->window.draw(*line3); // Draw the third arm
 }
 
-void Visualization::visualize(std::vector<std::vector<double>> q)
+void Visualization::drawInfo(double total_q_length, double q1, double q2, double q3)
+{
+    // Create font (using default for simplicity)
+    static sf::Font font;
+    if (!font.openFromFile("D:/Projects/Dof3Robot-cpp/HarmonyOS_Sans_Black.ttf"))
+    {
+        printf("[Visualization] Error loading font\n");
+    }
+
+    // Convert radians to degrees for display
+    auto radToDeg = [](double rad)
+    { return rad * 180.0 / M_PI; };
+
+    // Create text objects
+    sf::Text q1Text(font);
+    sf::Text q2Text(font);
+    sf::Text q3Text(font);
+    sf::Text totalText(font);
+    q1Text.setCharacterSize(16);
+    q2Text.setCharacterSize(16);
+    q3Text.setCharacterSize(16);
+    totalText.setCharacterSize(16);
+
+    // Position texts in top-left corner
+    q1Text.setPosition(Vector2f(10, 10));
+    q2Text.setPosition(Vector2f(10, 40));
+    q3Text.setPosition(Vector2f(10, 70));
+    totalText.setPosition(Vector2f(10, 100));
+
+    // Set text colors
+    q1Text.setFillColor(sf::Color::Black);
+    q2Text.setFillColor(sf::Color::Black);
+    q3Text.setFillColor(sf::Color::Black);
+    totalText.setFillColor(sf::Color::Black);
+
+    // Update text content
+    char buffer[50];
+    snprintf(buffer, sizeof(buffer), "q1: %.2f rads, %.2f degrees", q1, radToDeg(q1));
+    q1Text.setString(buffer);
+
+    snprintf(buffer, sizeof(buffer), "q2: %.2f rads, %.2f degrees", q2, radToDeg(q2));
+    q2Text.setString(buffer);
+
+    snprintf(buffer, sizeof(buffer), "q3: %.2f rads, %.2f degrees", q3, radToDeg(q3));
+    q3Text.setString(buffer);
+
+    snprintf(buffer, sizeof(buffer), "Total q length: %.2f", total_q_length);
+    totalText.setString(buffer);
+
+    // Draw the texts
+    window.draw(q1Text);
+    window.draw(q2Text);
+    window.draw(q3Text);
+    window.draw(totalText);
+}
+
+void Visualization::visualize(const std::vector<std::vector<double>> &q)
 {
     uint64_t total_frames = q.size(); // 帧数
     uint64_t frames = 0;              // 帧数
+    double total_q_length = 0.0;
     while (this->window.isOpen())
     {
         // check all the window's events that were triggered since the last iteration of the loop
@@ -90,13 +147,20 @@ void Visualization::visualize(std::vector<std::vector<double>> q)
         drawCircle(circle_x, circle_y, circle_r);
         // draw the arms
         drawArm(q[frames][0], q[frames][1], q[frames][2]);
+        // draw the info text
+        drawInfo(total_q_length, q[frames][0], q[frames][1], q[frames][2]);
         if (frames < total_frames - 1)
         {
+            // 计算当前q的总长度
+            total_q_length += sqrt(pow(q[frames+1][0] - q[frames][0], 2) +
+                                   pow(q[frames+1][1] - q[frames][1], 2) +
+                                   pow(q[frames+1][2] - q[frames][2], 2));
             frames++;
         }
         else if (PlayLoop)
         {
             frames = 0; // Reset frames to loop the animation
+            total_q_length = 0.0;
         }
         // end the current frame
         window.display();

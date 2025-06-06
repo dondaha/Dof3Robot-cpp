@@ -13,7 +13,7 @@
 #endif
 
 #define Tolerance 1e-2 // Tolerance for numerical stability
-#define Max_Iter 1000  // Maximum number of iterations for optimization
+#define Max_Iter 2000  // Maximum number of iterations for optimization
 
 class Planner
 {
@@ -22,31 +22,16 @@ private:
     double circle_x, circle_y; // Center of the circle
     double circle_r;           // Radius of the circle
     Eigen::Vector3d q;         // Array to store current joint angles
-    // RRT*规划相关成员
-    ompl::base::StateSpacePtr space;
-    ompl::base::SpaceInformationPtr si;
-    ompl::base::ProblemDefinitionPtr pdef;
-    // 自定义约束检查
-    class CircleConstraint : public ompl::base::StateValidityChecker
-    {
-    public:
-        CircleConstraint(const ompl::base::SpaceInformationPtr &si, Planner *planner)
-            : ompl::base::StateValidityChecker(si), planner_(planner) {}
-
-        bool isValid(const ompl::base::State *state) const override;
-
-    private:
-        Planner *planner_;
-    };
-
 public:
     Planner(double L1, double L2, double L3, double x, double y, double r, double q1 = 0, double q2 = 0, double q3 = 0);
     ~Planner();
     std::vector<std::vector<double>> planTrajectoryNewton(std::vector<std::vector<double>> points);
     std::vector<std::vector<double>> planTrajectoryOpitmization(std::vector<std::vector<double>> points);
+    std::vector<std::vector<double>> planTrajectoryRRTStar(std::vector<std::vector<double>> points);
     std::vector<std::vector<double>> pointsSampler(double step);
     Eigen::Matrix<double, 2, 3> J_matrix(const Eigen::Vector3d &q_val);
     Eigen::Vector2d kinematics(const Eigen::Vector3d &q_val);
+    Eigen::Vector3d ikinematics(const Eigen::Vector2d &p_d, const Eigen::Vector3d &q_initial = Eigen::Vector3d(0, 0, 0));
 };
 
 double calculate_total_q_distance(const std::vector<std::vector<double>> &q);

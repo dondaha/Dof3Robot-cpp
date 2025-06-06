@@ -1,6 +1,9 @@
 #include "planner.h"
 #include <iostream>
 #include <Eigen/Sparse> // Include the Eigen Sparse module
+#include <ompl/config.h>
+#include <ompl/base/goals/GoalState.h>
+#include <ompl/geometric/SimpleSetup.h>
 
 Planner::Planner(double L1, double L2, double L3, double x, double y, double r, double q1, double q2, double q3)
 {
@@ -21,8 +24,6 @@ Planner::~Planner()
 std::vector<std::vector<double>> Planner::pointsSampler(double step)
 {
     std::vector<std::vector<double>> points;
-    // 添加第-1个点
-    points.push_back(std::vector<double>{L1 * cos(q[0]) + L2 * cos(q[0] + q[1]) + L3 * cos(q[0] + q[1] + q[2]), L1 * sin(q[0]) + L2 * sin(q[0] + q[1]) + L3 * sin(q[0] + q[1] + q[2])});
     // 如果机械臂碰不到圆心直接返回
     if (L1 - L2 - L3 < 0)
     { // 先考虑工作空间为圆
@@ -107,6 +108,7 @@ std::vector<std::vector<double>> Planner::planTrajectoryOpitmization(std::vector
     // 每一次更新中，J为2(N-1)x3(N-1)的矩阵，由对角上的2x3雅可比矩阵J_i组成。
     // 每一次更新中，g为3(N-1)x1的梯度向量，由2(2q_2-q_1-q_3),2(q_3-q_2-q_4),...,2(2q_{N-1}-q_{N-2}-q_N),2(q_N-q_{N-1})组成。
     // 使用eigen的SimplicialLDLT求解KKT方程组
+    printf("[Planner] Use planner: Opimization\n");
     int64_t num_points = static_cast<int64_t>(points.size());
     if (num_points <= 1)
         return {std::vector<double>{q[0], q[1], q[2]}};
@@ -115,7 +117,7 @@ std::vector<std::vector<double>> Planner::planTrajectoryOpitmization(std::vector
     std::vector<Eigen::Vector3d> Q_initial;
     Eigen::Vector3d q_current = q;
     Q_initial.reserve(num_points - 1);
-    for (int i = 1; i < num_points; ++i)
+    for (int i = 0; i < num_points; ++i)
     {
         // 用牛顿法获取初始猜测
         Eigen::Vector2d p_target(points[i][0], points[i][1]);
@@ -128,7 +130,16 @@ std::vector<std::vector<double>> Planner::planTrajectoryOpitmization(std::vector
             Eigen::Matrix<double, 2, 3> J = J_matrix(q_current);
             q_current += J.completeOrthogonalDecomposition().solve(error);
         }
-        Q_initial.push_back(q_current);
+        if (i == 0)
+        {
+            q[0] = q_current[0];
+            q[1] = q_current[1];
+            q[2] = q_current[2];
+        }
+        else
+        {
+            Q_initial.push_back(q_current);
+        }
     }
 
     // 转换为Eigen向量
@@ -224,7 +235,7 @@ std::vector<std::vector<double>> Planner::planTrajectoryOpitmization(std::vector
         solver.compute(KKT);
         if (solver.info() != Eigen::Success)
         {
-            std::cerr << "KKT matrix decomposition failed!" << std::endl;
+            printf("[Planner] KKT matrix decomposition failed!\n");
             break;
         }
         Eigen::VectorXd delta = solver.solve(rhs);
@@ -280,6 +291,111 @@ std::vector<std::vector<double>> Planner::planTrajectoryOpitmization(std::vector
     return trajectory;
 }
 
+std::vector<std::vector<double>> Planner::planTrajectoryRRTStar(std::vector<std::vector<double>> points)
+{
+    // 除去第一个点，因为它是机械臂的初始位置
+    if (points.size() <= 1)
+        return {std::vector<double>{q[0], q[1], q[2]}};
+
+    // 使用OMPL库进行RRT*规划
+    namespace ob = ompl::base;
+    namespace og = ompl::geometric;
+    // 1. 定义状态空间（三连杆关节角度空间）
+    auto space(std::make_shared<ob::RealVectorStateSpace>(3));
+
+    // 2. 设置关节角度边界（示例为全周角度，可根据实际调整）
+    ob::RealVectorBounds bounds(3);
+    for (int i = 0; i < 3; ++i)
+    {
+        bounds.setLow(i, -M_PI);
+        bounds.setHigh(i, M_PI);
+    }
+    space->setBounds(bounds);
+
+    // 3. 创建空间信息实例
+    auto si(std::make_shared<ob::SpaceInformation>(space));
+
+    // 4. 定义状态有效性检查器
+    class ValidityChecker : public ob::StateValidityChecker
+    {
+    public:
+        ValidityChecker(const ob::SpaceInformationPtr &si, Planner *planner)
+            : ob::StateValidityChecker(si), planner_(planner) {}
+
+        bool isValid(const ob::State *state) const override
+        {
+            const auto *angles = state->as<ob::RealVectorStateSpace::StateType>();
+            Eigen::Vector3d q(angles->values[0], angles->values[1], angles->values[2]);
+            Eigen::Vector2d p = planner_->kinematics(q);
+
+            // 约束末端必须在目标圆上
+            double dx = p[0] - planner_->circle_x;
+            double dy = p[1] - planner_->circle_y;
+            double error = fabs(dx * dx + dy * dy - pow(planner_->circle_r, 2));
+            return error < Tolerance; // 使用与优化相同的容差
+        }
+
+    private:
+        Planner *planner_;
+    };
+    si->setStateValidityChecker(std::make_shared<ValidityChecker>(si, this));
+    si->setup();
+
+    // 5. 定义优化目标（路径长度）
+    ob::ProblemDefinitionPtr pdef(new ob::ProblemDefinition(si));
+    pdef->setOptimizationObjective(std::make_shared<ob::PathLengthOptimizationObjective>(si));
+
+    // 6. 设置起点和终点
+    ob::ScopedState<> start(space);
+    start[0] = q[0];
+    start[1] = q[1];
+    start[2] = q[2];
+
+    ob::ScopedState<> goal(space);
+    // 假设目标点对应机械臂末端坐标，需转换为关节空间
+    Eigen::Vector2d target_point(circle_x, circle_y); // 目标点为圆心坐标
+    Eigen::Vector3d q_goal = q;                       // 初始猜测为当前关节角度
+
+    // 使用牛顿法求解逆运动学
+    for (int iter = 0; iter < Max_Iter; ++iter)
+    {
+        Eigen::Vector2d p = kinematics(q_goal);
+        Eigen::Vector2d error = target_point - p;
+        if (error.norm() < Tolerance)
+            break;
+        Eigen::Matrix<double, 2, 3> J = J_matrix(q_goal);
+        q_goal += J.completeOrthogonalDecomposition().solve(error);
+    }
+
+    goal[0] = q_goal[0];
+    goal[1] = q_goal[1];
+    goal[2] = q_goal[2];
+
+    pdef->setStartAndGoalStates(start, goal);
+
+    // 7. 配置RRT*规划器
+    auto planner = std::make_shared<og::RRTstar>(si);
+    planner->setProblemDefinition(pdef);
+    planner->setup();
+
+    // 8. 执行规划
+    ob::PlannerStatus solved = planner->solve(ob::timedPlannerTerminationCondition(2.0)); // 规划时间2秒
+
+    // 9. 提取路径
+    std::vector<std::vector<double>> trajectory;
+    if (solved)
+    {
+        auto path = pdef->getSolutionPath()->as<og::PathGeometric>();
+        for (size_t i = 0; i < path->getStateCount(); ++i)
+        {
+            const auto *state = path->getState(i)->as<ob::RealVectorStateSpace::StateType>();
+            trajectory.push_back({state->values[0], state->values[1], state->values[2]});
+        }
+    }
+
+    return trajectory;
+}
+
 // planner.cpp 实现修改
 Eigen::Matrix<double, 2, 3> Planner::J_matrix(const Eigen::Vector3d &q_val)
 {
@@ -301,10 +417,14 @@ Eigen::Vector2d Planner::kinematics(const Eigen::Vector3d &q_val)
     return p;
 }
 
+// Eigen::Vector3d Planner::ikinematics(const Eigen::Vector2d &p_d, const Eigen::Vector3d &q_initial){
+
+// }
+
 double calculate_total_q_distance(const std::vector<std::vector<double>> &q)
 {
     double total_q_length = 0; // q在状态空间中的轨迹长度
-    for (size_t i = 1; i < q.size() - 1; i++)
+    for (size_t i = 0; i < q.size() - 1; i++)
     {
         double q_length = sqrt(pow(q[i + 1][0] - q[i][0], 2) + pow(q[i + 1][1] - q[i][1], 2) + pow(q[i + 1][2] - q[i][2], 2));
         total_q_length += q_length;
