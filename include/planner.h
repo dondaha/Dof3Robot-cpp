@@ -3,11 +3,16 @@
 
 #include <vector>
 #include <math.h>
+#include <cmath>
+#include <queue>
+#include <limits>
+#include <algorithm>
 #include <Eigen/Dense>
 #include <ompl/base/spaces/RealVectorStateSpace.h>
 #include <ompl/base/objectives/PathLengthOptimizationObjective.h>
 #include <ompl/geometric/planners/rrt/RRTstar.h>
 #include "main.h"
+#include <stdexcept>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -17,6 +22,34 @@
 #define Max_Iter 1000  // Maximum number of iterations for optimization
 #define Collision_Epsilon 10.0 // 碰撞阈值
 #define Collision_K 1.0    // 碰撞惩罚系数
+
+struct Point {
+    double x;
+    double y;
+};
+
+struct Circle {
+    double x;
+    double y;
+    double r;
+};
+
+// 节点结构体用于图搜索
+struct Node {
+    int i; // 轨迹点索引
+    int j; // theta1索引
+    double cost; // 从起点到该节点的代价
+    int prev; // 前驱节点索引
+    Eigen::Vector3d q; // 关节角度
+    
+    Node(int i, int j, double cost, int prev, const Eigen::Vector3d& q)
+        : i(i), j(j), cost(cost), prev(prev), q(q) {}
+    
+    // 用于优先队列比较
+    bool operator>(const Node& other) const {
+        return cost > other.cost;
+    }
+};
 
 class Planner
 {
@@ -36,9 +69,12 @@ Planner(double L1, double L2, double L3, double x, double y, double r, const std
     std::vector<std::vector<double>> pointsSampler(double step);
     Eigen::Matrix<double, 2, 3> J_matrix(const Eigen::Vector3d &q_val);
     Eigen::Vector2d kinematics(const Eigen::Vector3d &q_val);
+    bool Planner::checkCollision(const Eigen::Vector3d& q);
     // Eigen::Vector3d ikinematics(const Eigen::Vector2d &p_d, const Eigen::Vector3d &q_initial = Eigen::Vector3d(0, 0, 0));
 };
 
 double calculate_total_q_distance(const std::vector<std::vector<double>> &q);
+double normalizeAngle(double angle);
+std::vector<Point> computeCircleIntersection(const Circle& c1, const Circle& c2);
 
 #endif

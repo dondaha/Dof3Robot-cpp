@@ -1,7 +1,7 @@
 #ifndef __MAIN_H__
 #define __MAIN_H__
 
-// #define USE_CIRCLE_OBSTACLE // Define if you want to use circle obstacle avoidance
+#define USE_CIRCLE_OBSTACLE // Define if you want to use circle obstacle avoidance
 
 class CircleObstacle {
 public:

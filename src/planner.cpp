@@ -328,6 +328,178 @@ std::vector<std::vector<double>> Planner::planTrajectoryOpitmization(std::vector
     return trajectory;
 }
 
+std::vector<std::vector<double>> Planner::planTrajectoryBruteForce(std::vector<std::vector<double>> points) {
+    // 参数设置
+    const int M = 360; // theta1离散数量
+    const int delta_j = 1; // 相邻点theta1索引最大变化量
+    const double max_angle_step_per_joint = 10.0 * M_PI / 180.0; // 最大关节角度变化（弧度）
+    
+    int N = points.size(); // 轨迹点数量
+    if (N == 0) return {};
+    
+    // 存储所有节点
+    std::vector<Node> nodes;
+    // 存储每个轨迹点的节点索引范围 [start_index, end_index)
+    std::vector<std::pair<int, int>> node_ranges(N);
+    
+    // 1. 生成网格节点（考虑碰撞检测）
+    for (int i = 0; i < N; i++) {
+        const double x_d = points[i][0];
+        const double y_d = points[i][1];
+        int start_index = nodes.size();
+        
+        for (int j = 0; j < M; j++) {
+            double theta1 = -M_PI + j * (2 * M_PI / M);
+            
+            // 计算第一个关节位置
+            double x1 = L1 * cos(theta1);
+            double y1 = L1 * sin(theta1);
+            
+            // 计算从第一个关节到目标点的向量
+            double dx = x_d - x1;
+            double dy = y_d - y1;
+            double d = sqrt(dx*dx + dy*dy);
+            
+            // 检查是否可达
+            if (d > L2 + L3 || d < fabs(L2 - L3)) {
+                continue;
+            }
+            // 计算半径为L2和L3的圆的两个交点
+            Circle c1 = {x1, y1, L2};
+            Circle c2 = {x_d, y_d, L3};
+            double theta2_1, theta2_2, theta3_1, theta3_2;
+            try
+            {
+                auto intersections = computeCircleIntersection(c1, c2); // 实际为第三个关节的位置
+                theta2_1 = atan2(intersections[0].y - y1, intersections[0].x - x1)-theta1;
+                theta2_2 = atan2(intersections[1].y - y1, intersections[1].x - x1)-theta1;
+                theta3_1 = atan2(y_d - intersections[0].y, x_d - intersections[0].x)-atan2(intersections[0].y - y1, intersections[0].x - x1);
+                theta3_2 = atan2(y_d - intersections[1].y, x_d - intersections[1].x)-atan2(intersections[1].y - y1, intersections[1].x - x1);
+            }
+            catch(const std::exception& e)
+            {
+                std::cerr << "Error: " << e.what() << std::endl;
+                continue;
+            }
+            
+            
+            // 计算theta3
+            // double cos_theta3 = (d*d - L2*L2 - L3*L3) / (2*L2*L3);
+            // if (fabs(cos_theta3) > 1.0) continue; // 防止数值误差
+            
+            // double sin_theta3 = sqrt(1 - cos_theta3*cos_theta3);
+            // double theta3_1 = atan2(sin_theta3, cos_theta3);
+            // double theta3_2 = atan2(-sin_theta3, cos_theta3);
+            
+            // // 计算alpha（目标方向）
+            // double alpha = atan2(dy, dx);
+            
+            // // 计算两个可能的theta2
+            // double theta2_1 = alpha - atan2(L3*sin(theta3_1), L2 + L3*cos(theta3_1));
+            // double theta2_2 = alpha - atan2(L3*sin(theta3_2), L2 + L3*cos(theta3_2));
+            
+            // 创建两种可能的配置
+            Eigen::Vector3d q1(theta1, theta2_1, theta3_1);
+            Eigen::Vector3d q2(theta1, theta2_2, theta3_2);
+            
+            // 检查碰撞并添加节点
+            if (!checkCollision(q1)) {
+                nodes.emplace_back(i, j, std::numeric_limits<double>::max(), -1, q1);
+            }
+            if (!checkCollision(q2)) {
+                nodes.emplace_back(i, j, std::numeric_limits<double>::max(), -1, q2);
+            }
+        }
+        
+        node_ranges[i] = {start_index, static_cast<int>(nodes.size())};
+        
+        // 如果没有可行节点，返回空路径
+        if (node_ranges[i].first == node_ranges[i].second) {
+            return {};
+        }
+    }
+    
+    // 2. 初始化优先队列（最小堆）
+    auto cmp = [](const Node* a, const Node* b) { return a->cost > b->cost; };
+    std::priority_queue<Node*, std::vector<Node*>, decltype(cmp)> pq(cmp);
+    
+    // 3. 设置起点（第一个轨迹点的所有节点）
+    for (int idx = node_ranges[0].first; idx < node_ranges[0].second; idx++) {
+        nodes[idx].cost = 0.0;
+        pq.push(&nodes[idx]);
+    }
+    
+    // 4. Dijkstra算法
+    Node* end_node = nullptr;
+    double min_end_cost = std::numeric_limits<double>::max();
+    
+    while (!pq.empty()) {
+        Node* u = pq.top();
+        pq.pop();
+        
+        // 如果当前节点是最后一个轨迹点
+        if (u->i == N - 1) {
+            if (u->cost < min_end_cost) {
+                min_end_cost = u->cost;
+                end_node = u;
+            }
+            continue;
+        }
+        
+        // 处理下一个轨迹点
+        int next_i = u->i + 1;
+        for (int v_idx = node_ranges[next_i].first; v_idx < node_ranges[next_i].second; v_idx++) {
+            Node* v = &nodes[v_idx];
+            
+            // 检查theta1索引差（考虑循环）
+            int dj = abs(u->j - v->j);
+            if (dj > M / 2) dj = M - dj;
+            if (dj > delta_j) continue;
+            
+            // 计算关节角度变化
+            double dq0 = normalizeAngle(u->q[0] - v->q[0]);
+            double dq1 = normalizeAngle(u->q[1] - v->q[1]);
+            double dq2 = normalizeAngle(u->q[2] - v->q[2]);
+            
+            // 检查关节角度变化是否在允许范围内
+            if (fabs(dq0) > max_angle_step_per_joint || 
+                fabs(dq1) > max_angle_step_per_joint || 
+                fabs(dq2) > max_angle_step_per_joint) {
+                continue;
+            }
+            
+            // 计算边权（欧氏距离）
+            double dist = sqrt(dq0*dq0 + dq1*dq1 + dq2*dq2);
+            double new_cost = u->cost + dist;
+            
+            // 更新节点代价
+            if (new_cost < v->cost) {
+                v->cost = new_cost;
+                v->prev = u - &nodes[0]; // 存储索引
+                pq.push(v);
+            }
+        }
+    }
+    
+    // 5. 如果没有找到路径
+    if (end_node == nullptr) {
+        return {};
+    }
+    
+    // 6. 回溯路径
+    std::vector<std::vector<double>> result;
+    Node* current = end_node;
+    while (current != nullptr) {
+        result.push_back({current->q[0], current->q[1], current->q[2]});
+        if (current->prev == -1) break;
+        current = &nodes[current->prev];
+    }
+    
+    // 反转路径（从起点到终点）
+    std::reverse(result.begin(), result.end());
+    return result;
+}
+
 Eigen::Matrix<double, 2, 3> Planner::J_matrix(const Eigen::Vector3d &q_val)
 {
     Eigen::Matrix<double, 2, 3> J;
@@ -352,6 +524,58 @@ Eigen::Vector2d Planner::kinematics(const Eigen::Vector3d &q_val)
 
 // }
 
+// 碰撞检测函数
+bool Planner::checkCollision(const Eigen::Vector3d& q) {
+    // 计算所有碰撞圆的位置
+    std::vector<std::pair<double, double>> centers;
+    std::vector<double> radii;
+    
+    // 第一个连杆的碰撞圆
+    double q0 = q[0];
+    centers.push_back({(L1/6)*cos(q0), (L1/6)*sin(q0)});
+    centers.push_back({(L1/2)*cos(q0), (L1/2)*sin(q0)});
+    centers.push_back({(5*L1/6)*cos(q0), (5*L1/6)*sin(q0)});
+    radii.insert(radii.end(), 3, L1/6);
+    
+    // 第二个连杆的碰撞圆
+    double x1 = L1*cos(q0);
+    double y1 = L1*sin(q0);
+    double q01 = q0 + q[1];
+    centers.push_back({x1 + (L2/6)*cos(q01), y1 + (L2/6)*sin(q01)});
+    centers.push_back({x1 + (L2/2)*cos(q01), y1 + (L2/2)*sin(q01)});
+    centers.push_back({x1 + (5*L2/6)*cos(q01), y1 + (5*L2/6)*sin(q01)});
+    radii.insert(radii.end(), 3, L2/6);
+    
+    // 第三个连杆的碰撞圆
+    double x2 = x1 + L2*cos(q01);
+    double y2 = y1 + L2*sin(q01);
+    double q012 = q01 + q[2];
+    centers.push_back({x2 + (L3/6)*cos(q012), y2 + (L3/6)*sin(q012)});
+    centers.push_back({x2 + (L3/2)*cos(q012), y2 + (L3/2)*sin(q012)});
+    centers.push_back({x2 + (5*L3/6)*cos(q012), y2 + (5*L3/6)*sin(q012)});
+    radii.insert(radii.end(), 3, L3/6);
+    
+    // 检查每个碰撞圆与所有障碍物
+    for (int i = 0; i < 9; i++) {
+        double cx = centers[i].first;
+        double cy = centers[i].second;
+        double r = radii[i];
+        
+        for (const auto& obs : obstacles) {
+            double dx = cx - obs.x;
+            double dy = cy - obs.y;
+            double dist_sq = dx*dx + dy*dy;
+            double min_dist = r + obs.r + Collision_Epsilon;
+            
+            if (dist_sq < min_dist*min_dist) {
+                return true; // 碰撞
+            }
+        }
+    }
+    
+    return false; // 无碰撞
+}
+
 double calculate_total_q_distance(const std::vector<std::vector<double>> &q)
 {
     double total_q_length = 0; // q在状态空间中的轨迹长度
@@ -361,4 +585,60 @@ double calculate_total_q_distance(const std::vector<std::vector<double>> &q)
         total_q_length += q_length;
     }
     return total_q_length;
+}
+
+// 辅助函数：规范化角度到[-π, π]
+double normalizeAngle(double angle) {
+    while (angle > M_PI) {
+        angle -= 2 * M_PI;
+    }
+    while (angle < -M_PI) {
+        angle += 2 * M_PI;
+    }
+    return angle;
+}
+
+std::vector<Point> computeCircleIntersection(const Circle& c1, const Circle& c2) {
+    // 计算圆心之间的向量
+    double dx = c2.x - c1.x;
+    double dy = c2.y - c1.y;
+    
+    // 计算圆心距离
+    double d = std::hypot(dx, dy);
+    const double EPS = 1e-8;
+    
+    // 处理圆心重合的情况（题目确保有交点，但需避免除以0）
+    if (d < EPS) {
+        throw std::invalid_argument("Circles are concentric, infinite solutions");
+    }
+    
+    // 计算距离相关的中间量
+    double d_sq = d * d;
+    double r1_sq = c1.r * c1.r;
+    double r2_sq = c2.r * c2.r;
+    
+    // 计算投影长度
+    double h = (r1_sq + d_sq - r2_sq) / (2 * d);
+    
+    // 计算垂直方向的距离（勾股定理）
+    double k_sq = r1_sq - h * h;
+    // 处理浮点精度导致负值的情况
+    if (k_sq < -EPS) {
+        throw std::runtime_error("No intersection due to floating point precision");
+    }
+    double k = std::sqrt(std::max(k_sq, 0.0));
+    
+    // 计算基座点（圆心连线上的投影点）
+    double base_x = c1.x + (h * dx) / d;
+    double base_y = c1.y + (h * dy) / d;
+    
+    // 计算垂直方向的偏移向量（归一化并缩放）
+    double offset_x = (k * (-dy)) / d;
+    double offset_y = (k * dx) / d;
+    
+    // 计算两个交点
+    Point p1 = {base_x + offset_x, base_y + offset_y};
+    Point p2 = {base_x - offset_x, base_y - offset_y};
+    
+    return {p1, p2};
 }
