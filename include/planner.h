@@ -7,13 +7,16 @@
 #include <ompl/base/spaces/RealVectorStateSpace.h>
 #include <ompl/base/objectives/PathLengthOptimizationObjective.h>
 #include <ompl/geometric/planners/rrt/RRTstar.h>
+#include "main.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
 
 #define Tolerance 1e-2 // Tolerance for numerical stability
-#define Max_Iter 2000  // Maximum number of iterations for optimization
+#define Max_Iter 1000  // Maximum number of iterations for optimization
+#define Collision_Epsilon 10.0 // 碰撞阈值
+#define Collision_K 1.0    // 碰撞惩罚系数
 
 class Planner
 {
@@ -22,16 +25,18 @@ private:
     double circle_x, circle_y; // Center of the circle
     double circle_r;           // Radius of the circle
     Eigen::Vector3d q;         // Array to store current joint angles
+    std::vector<CircleObstacle> obstacles; // 存储障碍物的容器
 public:
-    Planner(double L1, double L2, double L3, double x, double y, double r, double q1 = 0, double q2 = 0, double q3 = 0);
+Planner(double L1, double L2, double L3, double x, double y, double r, const std::vector<CircleObstacle>& obs, double q1 = 0, double q2 = 0, double q3 = 0); 
     ~Planner();
     std::vector<std::vector<double>> planTrajectoryNewton(std::vector<std::vector<double>> points);
     std::vector<std::vector<double>> planTrajectoryOpitmization(std::vector<std::vector<double>> points);
     std::vector<std::vector<double>> planTrajectoryRRTStar(std::vector<std::vector<double>> points);
+    std::vector<std::vector<double>> planTrajectoryBruteForce(std::vector<std::vector<double>> points);
     std::vector<std::vector<double>> pointsSampler(double step);
     Eigen::Matrix<double, 2, 3> J_matrix(const Eigen::Vector3d &q_val);
     Eigen::Vector2d kinematics(const Eigen::Vector3d &q_val);
-    Eigen::Vector3d ikinematics(const Eigen::Vector2d &p_d, const Eigen::Vector3d &q_initial = Eigen::Vector3d(0, 0, 0));
+    // Eigen::Vector3d ikinematics(const Eigen::Vector2d &p_d, const Eigen::Vector3d &q_initial = Eigen::Vector3d(0, 0, 0));
 };
 
 double calculate_total_q_distance(const std::vector<std::vector<double>> &q);

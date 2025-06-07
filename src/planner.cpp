@@ -4,16 +4,12 @@
 #include <ompl/config.h>
 #include <ompl/base/goals/GoalState.h>
 #include <ompl/geometric/SimpleSetup.h>
+#include "main.h"
 
-Planner::Planner(double L1, double L2, double L3, double x, double y, double r, double q1, double q2, double q3)
+Planner::Planner(double L1, double L2, double L3, double x, double y, double r, const std::vector<CircleObstacle> &obs, double q1, double q2, double q3)
+    : L1(L1), L2(L2), L3(L3), circle_x(x), circle_y(y), circle_r(r), obstacles(obs) // 初始化障碍物列表
 {
-    this->L1 = L1;
-    this->L2 = L2;
-    this->L3 = L3;
-    this->circle_x = x;
-    this->circle_y = y;
-    this->circle_r = r;
-    this->q = {q1, q2, q3}; // Initialize q with 3 joint angles
+    this->q = {q1, q2, q3}; // 初始化关节角
 }
 
 Planner::~Planner()
@@ -188,6 +184,47 @@ std::vector<std::vector<double>> Planner::planTrajectoryOpitmization(std::vector
                 g.segment<3>(3 * i) = 2.0 * ((2.0 * q_i) - q_prev - q_next);
             }
         }
+#ifdef USE_CIRCLE_OBSTACLE
+        // 2.1 计算碰撞代价梯度并添加到 g
+        Eigen::VectorXd g_collision = Eigen::VectorXd::Zero(g.size());
+        for (int i = 0; i < num_points - 1; ++i)
+        {
+            Eigen::Vector3d q_i = Q.segment<3>(3 * i);
+            double k_list[3] = {1.0 / 6.0, 1.0 / 2.0, 5.0 / 6.0}; // 定义连杆上三个碰撞圆的相对位置（比例）
+
+            // 检查第一个连杆
+            for (int j = 0; j < 3; ++j)
+            {
+                double d = k_list[j] * L1; // 距离关节1的长度
+                Eigen::Vector2d center(d * cos(q_i[0]), d * sin(q_i[0]));
+                double radius = L1 / 6.0; // 碰撞圆半径
+
+                for (const auto &obstacle : obstacles)
+                {
+                    double dx = center.x() - obstacle.x;
+                    double dy = center.y() - obstacle.y;
+                    double dist = sqrt(dx * dx + dy * dy);
+                    double min_dist = dist - (radius + obstacle.r);
+
+                    // 限制min_dist，避免过大的负值
+                    min_dist = std::max(min_dist, -Collision_Epsilon);
+
+                    if (min_dist < Collision_Epsilon)
+                    {
+                        Eigen::Vector2d dir(dx / dist, dy / dist); // 单位方向向量（从障碍物指向碰撞圆中心）
+                        Eigen::Matrix<double, 2, 3> Jc = Eigen::Matrix<double, 2, 3>::Zero();
+                        Jc(0, 0) = -d * sin(q_i[0]);
+                        Jc(1, 0) = d * cos(q_i[0]);
+
+                        // 计算梯度: ∇c = k * min_dist * (Jcᵀ * dir)
+                        Eigen::Vector3d grad = Collision_K * min_dist * (Jc.transpose() * dir);
+                        g_collision.segment<3>(3 * i) += grad;
+                    }
+                }
+            }
+        }
+        g += g_collision; // 将碰撞梯度添加到目标函数的梯度
+#endif
 
         // 3. 构建雅可比矩阵J和残差c
         Eigen::SparseMatrix<double> J(2 * (num_points - 1), 3 * (num_points - 1));
@@ -243,7 +280,7 @@ std::vector<std::vector<double>> Planner::planTrajectoryOpitmization(std::vector
         // 7. 搜索方向上的步长
 
         // 7.1 固定步长
-        // double alpha = 0.1; // 固定步长
+        double alpha = 0.01; // 固定步长
 
         // 7.2 Diminishing step size
         // double alpha = 2.0/(opt_iter+1.0); // 步长
@@ -256,19 +293,19 @@ std::vector<std::vector<double>> Planner::planTrajectoryOpitmization(std::vector
         // 4. 如果不满足条件，收缩步长alpha *= beta
         // 5. 直到满足条件
         // 在这里gradiant就是delta归一化之后的值，与前面的delta^T相乘即为1，因此为f(x^k+alpha*delta) - f(x^k) > c * alpha
-        double alpha = 1.0;        // 初始步长
-        double beta = 0.5;         // 收缩因子
-        double armijo_error = 0.0; // 初始的f(x^k+alpha*delta) - f(x^k)
+        // double alpha = 1.0;        // 初始步长
+        // double beta = 0.5;         // 收缩因子
+        // double armijo_error = 0.0; // 初始的f(x^k+alpha*delta) - f(x^k)
 
-        double f_current = 0;
-        double f_new = 0.5 * alpha * delta.head(3 * (num_points - 1)).dot(H * alpha * delta.head(3 * (num_points - 1))) + g.dot(alpha * delta.head(3 * (num_points - 1)));
-        armijo_error = f_new - f_current;
-        while (armijo_error > 0.5 * alpha)
-        {
-            alpha *= beta; // 收缩步长
-            f_new = 0.5 * alpha * delta.head(3 * (num_points - 1)).dot(H * alpha * delta.head(3 * (num_points - 1))) + g.dot(alpha * delta.head(3 * (num_points - 1)));
-            armijo_error = f_new - f_current;
-        }
+        // double f_current = 0;
+        // double f_new = 0.5 * alpha * delta.head(3 * (num_points - 1)).dot(H * alpha * delta.head(3 * (num_points - 1))) + g.dot(alpha * delta.head(3 * (num_points - 1)));
+        // armijo_error = f_new - f_current;
+        // while (armijo_error > 0.5 * alpha)
+        // {
+        //     alpha *= beta; // 收缩步长
+        //     f_new = 0.5 * alpha * delta.head(3 * (num_points - 1)).dot(H * alpha * delta.head(3 * (num_points - 1))) + g.dot(alpha * delta.head(3 * (num_points - 1)));
+        //     armijo_error = f_new - f_current;
+        // }
 
         // 8. 更新Q
         Q += alpha * delta.head(3 * (num_points - 1));
@@ -291,112 +328,6 @@ std::vector<std::vector<double>> Planner::planTrajectoryOpitmization(std::vector
     return trajectory;
 }
 
-std::vector<std::vector<double>> Planner::planTrajectoryRRTStar(std::vector<std::vector<double>> points)
-{
-    // 除去第一个点，因为它是机械臂的初始位置
-    if (points.size() <= 1)
-        return {std::vector<double>{q[0], q[1], q[2]}};
-
-    // 使用OMPL库进行RRT*规划
-    namespace ob = ompl::base;
-    namespace og = ompl::geometric;
-    // 1. 定义状态空间（三连杆关节角度空间）
-    auto space(std::make_shared<ob::RealVectorStateSpace>(3));
-
-    // 2. 设置关节角度边界（示例为全周角度，可根据实际调整）
-    ob::RealVectorBounds bounds(3);
-    for (int i = 0; i < 3; ++i)
-    {
-        bounds.setLow(i, -M_PI);
-        bounds.setHigh(i, M_PI);
-    }
-    space->setBounds(bounds);
-
-    // 3. 创建空间信息实例
-    auto si(std::make_shared<ob::SpaceInformation>(space));
-
-    // 4. 定义状态有效性检查器
-    class ValidityChecker : public ob::StateValidityChecker
-    {
-    public:
-        ValidityChecker(const ob::SpaceInformationPtr &si, Planner *planner)
-            : ob::StateValidityChecker(si), planner_(planner) {}
-
-        bool isValid(const ob::State *state) const override
-        {
-            const auto *angles = state->as<ob::RealVectorStateSpace::StateType>();
-            Eigen::Vector3d q(angles->values[0], angles->values[1], angles->values[2]);
-            Eigen::Vector2d p = planner_->kinematics(q);
-
-            // 约束末端必须在目标圆上
-            double dx = p[0] - planner_->circle_x;
-            double dy = p[1] - planner_->circle_y;
-            double error = fabs(dx * dx + dy * dy - pow(planner_->circle_r, 2));
-            return error < Tolerance; // 使用与优化相同的容差
-        }
-
-    private:
-        Planner *planner_;
-    };
-    si->setStateValidityChecker(std::make_shared<ValidityChecker>(si, this));
-    si->setup();
-
-    // 5. 定义优化目标（路径长度）
-    ob::ProblemDefinitionPtr pdef(new ob::ProblemDefinition(si));
-    pdef->setOptimizationObjective(std::make_shared<ob::PathLengthOptimizationObjective>(si));
-
-    // 6. 设置起点和终点
-    ob::ScopedState<> start(space);
-    start[0] = q[0];
-    start[1] = q[1];
-    start[2] = q[2];
-
-    ob::ScopedState<> goal(space);
-    // 假设目标点对应机械臂末端坐标，需转换为关节空间
-    Eigen::Vector2d target_point(circle_x, circle_y); // 目标点为圆心坐标
-    Eigen::Vector3d q_goal = q;                       // 初始猜测为当前关节角度
-
-    // 使用牛顿法求解逆运动学
-    for (int iter = 0; iter < Max_Iter; ++iter)
-    {
-        Eigen::Vector2d p = kinematics(q_goal);
-        Eigen::Vector2d error = target_point - p;
-        if (error.norm() < Tolerance)
-            break;
-        Eigen::Matrix<double, 2, 3> J = J_matrix(q_goal);
-        q_goal += J.completeOrthogonalDecomposition().solve(error);
-    }
-
-    goal[0] = q_goal[0];
-    goal[1] = q_goal[1];
-    goal[2] = q_goal[2];
-
-    pdef->setStartAndGoalStates(start, goal);
-
-    // 7. 配置RRT*规划器
-    auto planner = std::make_shared<og::RRTstar>(si);
-    planner->setProblemDefinition(pdef);
-    planner->setup();
-
-    // 8. 执行规划
-    ob::PlannerStatus solved = planner->solve(ob::timedPlannerTerminationCondition(2.0)); // 规划时间2秒
-
-    // 9. 提取路径
-    std::vector<std::vector<double>> trajectory;
-    if (solved)
-    {
-        auto path = pdef->getSolutionPath()->as<og::PathGeometric>();
-        for (size_t i = 0; i < path->getStateCount(); ++i)
-        {
-            const auto *state = path->getState(i)->as<ob::RealVectorStateSpace::StateType>();
-            trajectory.push_back({state->values[0], state->values[1], state->values[2]});
-        }
-    }
-
-    return trajectory;
-}
-
-// planner.cpp 实现修改
 Eigen::Matrix<double, 2, 3> Planner::J_matrix(const Eigen::Vector3d &q_val)
 {
     Eigen::Matrix<double, 2, 3> J;

@@ -1,10 +1,9 @@
 #ifndef __VISUALIZATION_H__
 #define __VISUALIZATION_H__
-// TODO: 写一套可视化的代码，需要接收一个圆的坐标和半径，以及机械臂L1,L2,L3
-// TODO: 可视化函数要求接收一个二维数组q，来绘制出机械臂的运动轨迹
-// TODO: 还需要一个测试函数，让q1,q2,q3直接正弦变化，测试可视化效果
+
 #include <vector>
 #include <SFML/Graphics.hpp>
+#include "main.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -22,7 +21,7 @@
 #define Line3_Color sf::Color(236, 112, 99)
 #define Circle_Color sf::Color(170, 183, 184)
 #define Max_FrameRate 30
-#define PlayLoop false // 是否循环播放
+#define PlayLoop true // 是否循环播放
 
 class Visualization
 {
@@ -35,14 +34,17 @@ private:
     sf::RenderWindow window;                   // SFML window for visualization
     sf::CircleShape *circle;                   // Circle shape for drawing
     sf::RectangleShape *line1, *line2, *line3; // Line shapes for drawing the arms
+    std::vector<CircleObstacle> obstacles; // 存储障碍物的容器
 public:
-    Visualization(double L1, double L2, double L3, double x, double y, double r);
+    Visualization(double L1, double L2, double L3, double x, double y, double r, const std::vector<CircleObstacle> obstacles);
     ~Visualization();
     void drawCircle(double x, double y, double r);
     void drawArm(double q1, double q2, double q3);
     void drawInfo(double total_q_length, double q1, double q2, double q3);
+    void Visualization::drawCollisionCircles(double x0, double y0, double angle, double length, sf::Color color);
     void visualize(const std::vector<std::vector<double>> &q);
     void testSinusoidalMotion();
+    void Visualization::drawObs(); // Draw obstacles in the visualization
 };
 
 #endif

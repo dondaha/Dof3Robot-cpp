@@ -1,10 +1,11 @@
 #include "visualization.h"
 #include <SFML/Graphics.hpp>
 #include <math.h>
+#include "main.h"
 
 using namespace sf;
 
-Visualization::Visualization(double L1, double L2, double L3, double x, double y, double r)
+Visualization::Visualization(double L1, double L2, double L3, double x, double y, double r, const std::vector<CircleObstacle> obstacles)
 {
     this->L1 = L1;
     this->L2 = L2;
@@ -32,11 +33,52 @@ Visualization::Visualization(double L1, double L2, double L3, double x, double y
     this->line1->setFillColor(Line1_Color);                         // Set the color of the first arm to black
     this->line2->setFillColor(Line2_Color);                         // Set the color of the second arm to black
     this->line3->setFillColor(Line3_Color);                         // Set the color of the third arm to black
+    // 存储障碍物的容器
+    this->obstacles = obstacles; // Store the obstacles in the visualization
 }
 
 Visualization::~Visualization()
 {
     // Destructor
+}
+
+void Visualization::drawCollisionCircles(double x0, double y0, double angle, double length, sf::Color color)
+{
+    // 圆的直径为 L/3，半径为 L/6
+    double radius = length / 6.0;
+
+    // 第一个圆的位置 (L/6 处)
+    double x1 = x0 + (length / 6.0) * cos(angle);
+    double y1 = y0 + (length / 6.0) * sin(angle);
+
+    // 第二个圆的位置 (1/2 L 处)
+    double x2 = x0 + (length / 2.0) * cos(angle);
+    double y2 = y0 + (length / 2.0) * sin(angle);
+
+    // 第三个圆的位置 (5/6 L 处)
+    double x3 = x0 + (5.0 * length / 6.0) * cos(angle);
+    double y3 = y0 + (5.0 * length / 6.0) * sin(angle);
+
+    // 绘制三个圆
+    sf::CircleShape circle1(radius, 360);
+    circle1.setOrigin(Vector2f(static_cast<float>(radius), static_cast<float>(radius)));
+    circle1.setPosition(Vector2f(x1, y1));
+    circle1.setFillColor(color);
+
+    sf::CircleShape circle2(radius, 360);
+    circle2.setOrigin(Vector2f(radius, radius));
+    circle2.setPosition(Vector2f(x2, y2));
+    circle2.setFillColor(color);
+
+    sf::CircleShape circle3(radius, 360);
+    circle3.setOrigin(Vector2f(radius, radius));
+    circle3.setPosition(Vector2f(x3, y3));
+    circle3.setFillColor(color);
+
+    // 在窗口中绘制
+    this->window.draw(circle1);
+    this->window.draw(circle2);
+    this->window.draw(circle3);
 }
 
 void Visualization::drawCircle(double x, double y, double r)
@@ -45,6 +87,20 @@ void Visualization::drawCircle(double x, double y, double r)
     circle->setRadius(r);                // Set the radius of the circle
     this->window.draw(*circle);          // Draw the circle
 }
+
+void Visualization::drawObs()
+{
+    for (const auto &obstacle : obstacles)
+    {
+        CircleShape obs(obstacle.r, 360); // Create a new circle shape for the obstacle
+        obs.setOrigin(Vector2f(obstacle.r, obstacle.r)); // Set the origin of the obstacle to its center
+        obs.setPosition(Vector2f(World_Center_X + obstacle.x, World_Center_Y + obstacle.y)); // Set the position of the obstacle
+        obs.setFillColor(Color(255, 0, 0, 100)); // Set the color of the obstacle to red with some transparency
+        this->window.draw(obs); // Draw the obstacle
+    }
+}
+
+
 
 void Visualization::drawArm(double q1, double q2, double q3)
 {
@@ -55,18 +111,28 @@ void Visualization::drawArm(double q1, double q2, double q3)
     double y1 = y0 + L1 * sin(q1);
     double x2 = x1 + L2 * cos(q1 + q2);
     double y2 = y1 + L2 * sin(q1 + q2);
+
     // 设置每根机械臂的角度
     this->line1->setRotation(radians(q1));           // Convert radians to degrees
     this->line2->setRotation(radians(q1 + q2));      // Convert radians to degrees
     this->line3->setRotation(radians(q1 + q2 + q3)); // Convert radians to degrees
+
     // 设置每根机械臂的坐标
     this->line1->setPosition(Vector2f(x0, y0)); // Set the position of the first arm to (0, 0)
     this->line2->setPosition(Vector2f(x1, y1)); // Set the position of the second arm to (0, 0)
     this->line3->setPosition(Vector2f(x2, y2)); // Set the position of the third arm to (0, 0)
+
     // 画出每根机械臂
     this->window.draw(*line1); // Draw the first arm
     this->window.draw(*line2); // Draw the second arm
     this->window.draw(*line3); // Draw the third arm
+
+#ifdef USE_CIRCLE_OBSTACLE
+    // 绘制每根连杆的碰撞圆
+    drawCollisionCircles(x0, y0, q1, L1, sf::Color(0, 230, 0, 100));           // 第一根连杆
+    drawCollisionCircles(x1, y1, q1 + q2, L2, sf::Color(0, 0, 255, 100));     // 第二根连杆
+    drawCollisionCircles(x2, y2, q1 + q2 + q3, L3, sf::Color(127, 0, 200, 100)); // 第三根连杆
+#endif
 }
 
 void Visualization::drawInfo(double total_q_length, double q1, double q2, double q3)
@@ -145,6 +211,8 @@ void Visualization::visualize(const std::vector<std::vector<double>> &q)
 
         // draw the circle
         drawCircle(circle_x, circle_y, circle_r);
+        // draw the obstacles
+        drawObs();
         // draw the arms
         drawArm(q[frames][0], q[frames][1], q[frames][2]);
         // draw the info text

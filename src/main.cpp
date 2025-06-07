@@ -1,6 +1,7 @@
 #include "stdio.h"
 #include "visualization.h"
 #include "planner.h"
+#include "main.h"
 
 int main()
 {
@@ -14,10 +15,15 @@ int main()
     const double circle_x = 300;
     const double circle_y = 0;
     const double circle_r = 80;
+    // 定义障碍物
+    std::vector<CircleObstacle> obstacles;
+    // obstacles.push_back(CircleObstacle(200, 200, 30));  // 障碍物1
+    obstacles.push_back(CircleObstacle(400, -100, 40)); // 障碍物2
+    obstacles.push_back(CircleObstacle(10, 120, 20)); // 障碍物3
     // 创建一个可视化模型
-    Visualization *vis = new Visualization(L1, L2, L3, circle_x, circle_y, circle_r);
+    Visualization *vis = new Visualization(L1, L2, L3, circle_x, circle_y, circle_r, obstacles);
     // 创建一个路径规划模型
-    Planner *planner = new Planner(L1, L2, L3, circle_x, circle_y, circle_r, 1);
+    Planner *planner = new Planner(L1, L2, L3, circle_x, circle_y, circle_r, obstacles, 1);
     // 规划路径
     std::vector<std::vector<double>> points = planner->pointsSampler(0.1);
     // 规划轨迹
