@@ -8,9 +8,16 @@
 #include <limits>
 #include <algorithm>
 #include <Eigen/Dense>
+#include <ompl/config.h>
+#include <ompl/base/goals/GoalState.h>
+#include <ompl/geometric/SimpleSetup.h>
 #include <ompl/base/spaces/RealVectorStateSpace.h>
 #include <ompl/base/objectives/PathLengthOptimizationObjective.h>
+#include <ompl/base/spaces/constraint/ProjectedStateSpace.h>
+#include <ompl/base/ConstrainedSpaceInformation.h>
 #include <ompl/geometric/planners/rrt/RRTstar.h>
+#include <iostream>
+#include <Eigen/Sparse> // Include the Eigen Sparse module
 #include "main.h"
 #include <stdexcept>
 
@@ -22,6 +29,9 @@
 #define Max_Iter 1000  // Maximum number of iterations for optimization
 #define Collision_Epsilon 10.0 // 碰撞阈值
 #define Collision_K 1.0    // 碰撞惩罚系数
+
+namespace ob = ompl::base;
+namespace og = ompl::geometric;
 
 struct Point {
     double x;
@@ -51,6 +61,7 @@ struct Node {
     }
 };
 
+
 class Planner
 {
 private:
@@ -70,8 +81,9 @@ Planner(double L1, double L2, double L3, double x, double y, double r, const std
     Eigen::Matrix<double, 2, 3> J_matrix(const Eigen::Vector3d &q_val);
     Eigen::Vector2d kinematics(const Eigen::Vector3d &q_val);
     bool Planner::checkCollision(const Eigen::Vector3d& q);
-    // Eigen::Vector3d ikinematics(const Eigen::Vector2d &p_d, const Eigen::Vector3d &q_initial = Eigen::Vector3d(0, 0, 0));
+    Eigen::Vector3d ikinematics(const Eigen::Vector2d &p_d, const Eigen::Vector3d &q_initial = Eigen::Vector3d(0, 0, 0));
 };
+
 
 double calculate_total_q_distance(const std::vector<std::vector<double>> &q);
 double normalizeAngle(double angle);
