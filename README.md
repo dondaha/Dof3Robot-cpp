@@ -18,6 +18,10 @@ vcpkg install eigen3:x64-windows
 
 在`main.h`中定义了宏USE_CIRCLE_OBSTACLE，开启即可打开障碍物的生成和避障规划。
 
+## 实验报告
+
+见[实验报告PDF](实验报告.pdf)
+
 ## 1. 模型分析
 
 ### 1.1 **机械臂运动学模型**
